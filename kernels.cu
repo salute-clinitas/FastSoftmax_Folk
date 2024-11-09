@@ -4,7 +4,7 @@
 #include <cuda_runtime.h>
 
 #ifndef BLOCK_DIM_Y
-#define BLOCK_DIM_Y 1024
+#define BLOCK_DIM_Y 1024 
 #endif
 
 #ifndef UNROLL_FACTOR
@@ -579,6 +579,100 @@ __global__ void softmax_kernel8(scalar_t* __restrict__ a, scalar_t* __restrict__
   }
 }
 
+template <typename scalar_t>
+__global__ void softmax_kernel9(scalar_t* __restrict__ a, scalar_t* __restrict__ b, int w, int h)
+{
+  int row = blockIdx.x*blockDim.x + threadIdx.x;
+  int ty = threadIdx.y;
+  __shared__ scalar_t reduction[BLOCK_DIM_Y/2]; 
+  if (row < h)
+  {
+    scalar_t maxval = 0;
+    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
+    {
+      #pragma unroll
+      for (int u = 0; u<UNROLL_FACTOR; u++)
+      {
+        float4 val = reinterpret_cast<float4*>(&a[row*w + u*BLOCK_DIM_Y*4 + i*4])[0];
+        maxval = fmaxf(maxval, val.x);
+        maxval = fmaxf(maxval, val.y);
+        maxval = fmaxf(maxval, val.z);
+        maxval = fmaxf(maxval, val.w);
+      }
+    }
+
+    if (ty >= BLOCK_DIM_Y/2)
+    {
+      reduction[ty - BLOCK_DIM_Y/2] = maxval;
+    }
+    #pragma unroll
+    for(int stride = BLOCK_DIM_Y/2; stride>=1; stride/=2)
+    {
+      __syncthreads();
+      if (ty < stride)
+      {
+        maxval = fmaxf(maxval, reduction[ty]);
+        if (ty >= stride/2)
+        {
+          reduction[ty - stride/2] = maxval;
+        }
+      }
+    }
+
+    __syncthreads();
+    maxval = reduction[0];
+
+    scalar_t divisor = 0.f;
+    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
+    {
+      #pragma unroll
+      for (int u = 0; u<UNROLL_FACTOR; u++)
+      {
+        float4 val = reinterpret_cast<float4*>(&a[row*w + u*BLOCK_DIM_Y*4 + i*4])[0];
+        divisor += __expf(val.x - maxval);
+        divisor += __expf(val.y - maxval);
+        divisor += __expf(val.z - maxval);
+        divisor += __expf(val.w - maxval);
+      }
+    }
+
+    if (ty >= BLOCK_DIM_Y/2)
+    {
+      reduction[ty - BLOCK_DIM_Y/2] = divisor;
+    }
+
+    #pragma unroll
+    for(int stride = BLOCK_DIM_Y/2; stride>=1; stride/=2)
+    {
+      __syncthreads();
+      if (ty < stride)
+      {
+        divisor = divisor + reduction[ty];
+        if (ty >= stride/2)
+        {
+          reduction[ty - stride/2] = divisor;
+        }
+      }
+    }
+    __syncthreads();
+    divisor = reduction[0];
+
+    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
+    {
+      #pragma unroll
+      for (int u = 0; u<UNROLL_FACTOR; u++)
+      {
+        float4 val = reinterpret_cast<float4*>(&a[row*w + u*BLOCK_DIM_Y*4 + i*4])[0];
+        val.x = __expf(val.x-maxval)/divisor;
+        val.y = __expf(val.y-maxval)/divisor;
+        val.z = __expf(val.z-maxval)/divisor;
+        val.w = __expf(val.w-maxval)/divisor;
+        reinterpret_cast<float4*>(&b[row*w + u*BLOCK_DIM_Y*4 + i*4])[0] = val;
+      }
+    }
+  }
+}
+
 torch::Tensor softmax_cu(torch::Tensor x)
 {
   auto out = torch::empty_like(x);
@@ -635,6 +729,13 @@ torch::Tensor softmax_cu(torch::Tensor x)
 #if SOFTMAX_VARIANT == 8
   AT_DISPATCH_FLOATING_TYPES(x.type(), "softmax_cuda", ([&] {
         softmax_kernel8<scalar_t><<<grid_size, block_size>>>
+          (x.data_ptr<scalar_t>(), out.data_ptr<scalar_t>(), w, h);
+        }));
+#endif
+
+#if SOFTMAX_VARIANT == 9
+  AT_DISPATCH_FLOATING_TYPES(x.type(), "softmax_cuda", ([&] {
+        softmax_kernel9<scalar_t><<<grid_size, block_size>>>
           (x.data_ptr<scalar_t>(), out.data_ptr<scalar_t>(), w, h);
         }));
 #endif

@@ -1,7 +1,6 @@
 import torch
 import triton
 import triton.language as tl
-import timeit
 from triton.runtime import driver
 from torch.utils.cpp_extension import load
 torch.set_default_device('cuda')
@@ -67,38 +66,24 @@ def softmax_triton(x):
     kernel[(num_programs, 1, 1)](y, x, x.stride(0), y.stride(0), n_rows, n_cols,)
     return y
 
-def sync_wrapper(callable):
-    out = callable()
-    torch.cuda.synchronize()
+if __name__ == "__main__":
+    x = torch.rand(128, 2**17, device='cuda')
 
-def time_fn(callable, reps):
-    return timeit.timeit(lambda: sync_wrapper(callable), number=reps)
+    y = torch.softmax(x, dim=-1)
+    y2 = softmax_triton(x)
+    reps = 1000
+      
+    torch_ms = triton.testing.do_bench(lambda: torch.softmax(x, dim=-1), rep=reps)
+    print(f"triton took {torch_ms:.4f}")
+    triton_ms = triton.testing.do_bench(lambda: softmax_triton(x), rep=reps)
+    print(f"torch took {triton_ms:.4f}")
 
+    for variant in range(3, 10):
+        cuda = load(name='softmax_cuda', sources=["interface.cpp", "kernels.cu"], verbose=False, extra_cuda_cflags=[f"-lineinfo", "--use_fast_math", "-O3", f"-DSOFTMAX_VARIANT={variant}", f"-DBLOCK_DIM_Y={128}", f"-DUNROLL_FACTOR={8}", ])
+        y3 = cuda.softmax_cuda(x)
 
-x = torch.rand(128, 2**17, device='cuda')
-
-y = torch.softmax(x, dim=-1)
-y2 = softmax_triton(x)
-reps = 400
-  
-torch_ms = triton.testing.do_bench(lambda: torch.softmax(x, dim=-1), rep=reps)
-torch_ms_timeit = time_fn(lambda: torch.softmax(x, dim=-1), reps=reps)
-print(f"torch function, triton reported {torch_ms:.4f}, timeit reported {torch_ms_timeit:.4f}")
-
-triton_ms = triton.testing.do_bench(lambda: softmax_triton(x), rep=reps)
-triton_ms_timeit = time_fn(lambda: softmax_triton(x), reps=reps)
-
-print(f"triton function, triton reported {triton_ms:.4f}, timeit reported {triton_ms_timeit:.4f}")
-
-
-
-for variant in range(1, 9):
-    cuda = load(name='softmax_cuda', sources=["interface.cpp", "kernels.cu"], verbose=False, extra_cuda_cflags=[f"-lineinfo", "--use_fast_math", "-O3", f"-DSOFTMAX_VARIANT={variant}" ])
-    y3 = cuda.softmax_cuda(x)
-
-    assert torch.allclose(y, y2, atol=1e-6, rtol=1e-6), (y, y2)
-    assert torch.allclose(y, y3, atol=1e-6, rtol=1e-6), (y, y3)
-    cuda_ms = triton.testing.do_bench(lambda: cuda.softmax_cuda(x), rep=reps)
-    cuda_ms_timeit = time_fn(lambda: cuda.softmax_cuda(x), reps=reps)
-    print(f"variant {variant}, triton reported {cuda_ms:.4f}, timeit reported {cuda_ms_timeit:.4f}")
+        assert torch.allclose(y, y2, atol=1e-8, rtol=1e-8), (y, y2)
+        assert torch.allclose(y, y3, atol=1e-8, rtol=1e-8), (y, y3)
+        cuda_ms = triton.testing.do_bench(lambda: cuda.softmax_cuda(x), rep=reps)
+        print(f"variant {variant} took {cuda_ms:.4f}")
 

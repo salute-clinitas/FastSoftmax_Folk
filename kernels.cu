@@ -23,12 +23,12 @@ __global__ void softmax_kernel(scalar_t* __restrict__ a, scalar_t* __restrict__ 
   int row = blockIdx.y*blockDim.y + threadIdx.y;
   if (row < h && col < w)
   {
-    scalar_t maxval = a[row*w];
+    float maxval = a[row*w];
     for (int i = 1; i<w; i++)
     {
       maxval = fmaxf(maxval, a[row*w + i]);
     }
-    scalar_t divisor = 0.f;
+    float divisor = 0.f;
     for (int i = 0; i<w; i++)
     {
       divisor += __expf(a[row*w + i] - maxval);
@@ -43,10 +43,10 @@ __global__ void softmax_kernel2(scalar_t* __restrict__ a, scalar_t* __restrict__
 {
   int row = blockIdx.x*blockDim.x + threadIdx.x;
   int ty = threadIdx.y;
-  __shared__ scalar_t reduction[BLOCK_DIM_Y]; 
+  __shared__ float reduction[BLOCK_DIM_Y]; 
   if (row < h)
   {
-    scalar_t maxval = 0;
+    float maxval = 0;
     for (int i = ty; i<w; i+=BLOCK_DIM_Y)
     {
       maxval = fmaxf(maxval, a[row*w + i]);
@@ -64,7 +64,7 @@ __global__ void softmax_kernel2(scalar_t* __restrict__ a, scalar_t* __restrict__
 
     __syncthreads();
     maxval = reduction[0];
-    scalar_t divisor = 0.f;
+    float divisor = 0.f;
     for (int i = 0; i<w; i++)
     {
       divisor += __expf(a[row*w + i] - maxval);
@@ -83,10 +83,10 @@ __global__ void softmax_kernel3(scalar_t* __restrict__ a, scalar_t* __restrict__
 {
   int row = blockIdx.x*blockDim.x + threadIdx.x;
   int ty = threadIdx.y;
-  __shared__ scalar_t reduction[BLOCK_DIM_Y]; 
+  __shared__ float reduction[BLOCK_DIM_Y]; 
   if (row < h)
   {
-    scalar_t maxval = 0;
+    float maxval = 0;
     for (int i = ty; i<w; i+=BLOCK_DIM_Y)
     {
       maxval = fmaxf(maxval, a[row*w + i]);
@@ -105,7 +105,7 @@ __global__ void softmax_kernel3(scalar_t* __restrict__ a, scalar_t* __restrict__
     __syncthreads();
     maxval = reduction[0];
 
-    scalar_t divisor = 0.f;
+    float divisor = 0.f;
     for (int i = ty; i<w; i+=BLOCK_DIM_Y)
     {
       divisor += __expf(a[row*w + i] - maxval);
@@ -134,10 +134,10 @@ __global__ void softmax_kernel4(scalar_t* __restrict__ a, scalar_t* __restrict__
 {
   int row = blockIdx.x*blockDim.x + threadIdx.x;
   int ty = threadIdx.y;
-  __shared__ scalar_t reduction[BLOCK_DIM_Y/2]; 
+  __shared__ float reduction[BLOCK_DIM_Y/2]; 
   if (row < h)
   {
-    scalar_t maxval = 0;
+    float maxval = 0;
     for (int i = ty; i<w; i+=BLOCK_DIM_Y)
     {
       maxval = fmaxf(maxval, a[row*w + i]);
@@ -163,7 +163,7 @@ __global__ void softmax_kernel4(scalar_t* __restrict__ a, scalar_t* __restrict__
     __syncthreads();
     maxval = reduction[0];
 
-    scalar_t divisor = 0.f;
+    float divisor = 0.f;
     for (int i = ty; i<w; i+=BLOCK_DIM_Y)
     {
       divisor += __expf(a[row*w + i] - maxval);
@@ -201,10 +201,10 @@ __global__ void softmax_kernel5(scalar_t* __restrict__ a, scalar_t* __restrict__
 {
   int row = blockIdx.x*blockDim.x + threadIdx.x;
   int ty = threadIdx.y;
-  __shared__ scalar_t reduction[BLOCK_DIM_Y/2]; 
+  __shared__ float reduction[BLOCK_DIM_Y/2]; 
   if (row < h)
   {
-    scalar_t maxval = 0;
+    float maxval = 0;
     for (int i = ty; i<w/4; i+=BLOCK_DIM_Y)
     {
       float4 val = reinterpret_cast<float4*>(&a[row*w + i*4])[0];
@@ -234,7 +234,7 @@ __global__ void softmax_kernel5(scalar_t* __restrict__ a, scalar_t* __restrict__
     __syncthreads();
     maxval = reduction[0];
 
-    scalar_t divisor = 0.f;
+    float divisor = 0.f;
     for (int i = ty; i<w/4; i+=BLOCK_DIM_Y)
     {
       float4 val = reinterpret_cast<float4*>(&a[row*w + i*4])[0];
@@ -282,10 +282,10 @@ __global__ void softmax_kernel6(scalar_t* __restrict__ a, scalar_t* __restrict__
   int row = blockIdx.x*blockDim.x + threadIdx.x;
   int ty = threadIdx.y;
   int warp_id = ty/32;
-  __shared__ scalar_t reduction[BLOCK_DIM_Y/32]; 
+  __shared__ float reduction[BLOCK_DIM_Y/32]; 
   if (row < h)
   {
-    scalar_t maxval = 0;
+    float maxval = 0;
     for (int i = ty; i<w/4; i+=BLOCK_DIM_Y)
     {
       float4 val = reinterpret_cast<float4*>(&a[row*w + i*4])[0];
@@ -318,7 +318,7 @@ __global__ void softmax_kernel6(scalar_t* __restrict__ a, scalar_t* __restrict__
     }
     __syncthreads();
     maxval = reduction[0];
-    scalar_t divisor = 0.f;
+    float divisor = 0.f;
     for (int i = ty; i<w/4; i+=BLOCK_DIM_Y)
     {
       float4 val = reinterpret_cast<float4*>(&a[row*w + i*4])[0];
@@ -372,10 +372,10 @@ __global__ void softmax_kernel7(scalar_t* __restrict__ a, scalar_t* __restrict__
   int row = blockIdx.x;
   int ty = threadIdx.y;
   int warp_id = ty/32;
-  __shared__ scalar_t reduction[BLOCK_DIM_Y/32]; 
+  __shared__ float reduction[BLOCK_DIM_Y/32]; 
   if (row < h)
   {
-    scalar_t maxval = 0;
+    float maxval = 0;
     for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
     {
       #pragma unroll
@@ -414,7 +414,7 @@ __global__ void softmax_kernel7(scalar_t* __restrict__ a, scalar_t* __restrict__
     }
     __syncthreads();
     maxval = reduction[0];
-    scalar_t divisor = 0.f;
+    float divisor = 0.f;
     for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
     {
       #pragma unroll
@@ -480,13 +480,13 @@ __global__ void softmax_kernel8(scalar_t* __restrict__ a, scalar_t* __restrict__
   int row = blockIdx.x;
   int ty = threadIdx.y;
   int warp_id = ty/32;
-  __shared__ scalar_t reduction_max[BLOCK_DIM_Y/32]; 
-  __shared__ scalar_t reduction_div[BLOCK_DIM_Y/32]; 
+  __shared__ float reduction_max[BLOCK_DIM_Y/32]; 
+  __shared__ float reduction_div[BLOCK_DIM_Y/32]; 
   if (row < h)
   {
-    scalar_t maxval = 0;
-    scalar_t divisor = 0;
-    scalar_t old_maxval = 0;
+    float maxval = 0;
+    float divisor = 0;
+    float old_maxval = 0;
     for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
     {
       #pragma unroll
@@ -508,8 +508,8 @@ __global__ void softmax_kernel8(scalar_t* __restrict__ a, scalar_t* __restrict__
         divisor += __expf(val.w - maxval);
       }
     }
-    scalar_t incoming_divisor = 0;
-    scalar_t incoming_maxval = 0;
+    float incoming_divisor = 0;
+    float incoming_maxval = 0;
     #pragma unroll
     for (int mask = 16; mask>0; mask/=2)
     {
@@ -584,10 +584,10 @@ __global__ void softmax_kernel9(scalar_t* __restrict__ a, scalar_t* __restrict__
 {
   int row = blockIdx.x*blockDim.x + threadIdx.x;
   int ty = threadIdx.y;
-  __shared__ scalar_t reduction[BLOCK_DIM_Y/2]; 
+  __shared__ float reduction[BLOCK_DIM_Y/2]; 
   if (row < h)
   {
-    scalar_t maxval = 0;
+    float maxval = 0;
     for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
     {
       #pragma unroll
@@ -622,7 +622,7 @@ __global__ void softmax_kernel9(scalar_t* __restrict__ a, scalar_t* __restrict__
     __syncthreads();
     maxval = reduction[0];
 
-    scalar_t divisor = 0.f;
+    float divisor = 0.f;
     for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
     {
       #pragma unroll

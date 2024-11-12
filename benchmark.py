@@ -155,7 +155,7 @@ torch.set_default_device('cuda')
 if __name__ == "__main__":
     times_triton = []
     times_torch = []
-    times_cuda = [[] for i in range(10)]
+    times_cuda = [[] for i in range(11)]
 
     for pow in range(10, 18):
         x = torch.rand(128, 2**pow, device='cuda')
@@ -178,7 +178,7 @@ out = softmax_triton(x)'''
         for variant in range(3, 11):
             (dim_y, unroll), time = fine_tune_kernel(variant, variant > 6, x, pow, variant>4)
             times_cuda[variant].append(time)
-            cuda = load(name='softmax_cuda', sources=["interface.cpp", "kernels.cu"], verbose=True, extra_cuda_cflags=[f"-lineinfo", "--use_fast_math", "-O3", f"-DSOFTMAX_VARIANT={variant}", f"-DBLOCK_DIM_Y={dim_y}", f"-DUNROLL_FACTOR={unroll}", f"-DWIDTH={2**pow}"], extra_cflags=[f"-DSOFTMAX_VARIANT={variant}", f"-DBLOCK_DIM_Y={dim_y}", f"-DUNROLL_FACTOR={unroll}", f"-DWIDTH={2**pow}"])
+            cuda = load(name='softmax_cuda', sources=["interface.cpp", "kernels.cu"], verbose=False, extra_cuda_cflags=[f"-lineinfo", "--use_fast_math", "-O3", f"-DSOFTMAX_VARIANT={variant}", f"-DBLOCK_DIM_Y={dim_y}", f"-DUNROLL_FACTOR={unroll}", f"-DWIDTH={2**pow}"], extra_cflags=[f"-DSOFTMAX_VARIANT={variant}", f"-DBLOCK_DIM_Y={dim_y}", f"-DUNROLL_FACTOR={unroll}", f"-DWIDTH={2**pow}"])
             y3 = cuda.softmax_cuda(x)
 
             assert torch.allclose(y, y2, atol=1e-8, rtol=1e-8), (y, y2)

@@ -1,4 +1,3 @@
-
 #include <torch/extension.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -10,6 +9,7 @@
 #ifndef UNROLL_FACTOR
 #define UNROLL_FACTOR 8
 #endif
+constexpr int URF{UNROLL_FACTOR};
 
 #ifndef SOFTMAX_VARIANT
 #define SOFTMAX_VARIANT 8
@@ -381,17 +381,14 @@ __global__ void softmax_kernel7(scalar_t* __restrict__ a, scalar_t* __restrict__
   if (row < h)
   {
     float maxval = 0;
-    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
+#pragma unroll URF
+    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y)
     {
-      #pragma unroll
-      for (int u = 0; u<UNROLL_FACTOR && (i+u*BLOCK_DIM_Y)*4<w; u++)
-      {
-        float4 val = reinterpret_cast<float4*>(&a[row*w + u*BLOCK_DIM_Y*4 + i*4])[0];
+        float4 val = reinterpret_cast<float4*>(&a[row*w + i*4])[0];
         maxval = fmaxf(maxval, val.x);
         maxval = fmaxf(maxval, val.y);
         maxval = fmaxf(maxval, val.z);
         maxval = fmaxf(maxval, val.w);
-      }
     }
     maxval = fmaxf(maxval, __shfl_down_sync(0xffffffff, maxval, 16, 32));
     maxval = fmaxf(maxval, __shfl_down_sync(0xffffffff, maxval, 8, 32));
@@ -420,17 +417,14 @@ __global__ void softmax_kernel7(scalar_t* __restrict__ a, scalar_t* __restrict__
     __syncthreads();
     maxval = reduction[0];
     float divisor = 0.f;
-    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
+#pragma unroll URF
+    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y)
     {
-      #pragma unroll
-      for (int u = 0; u<UNROLL_FACTOR && (i+u*BLOCK_DIM_Y)*4<w; u++)
-      {
-        float4 val = reinterpret_cast<float4*>(&a[row*w + u*BLOCK_DIM_Y*4 + i*4])[0];
+        float4 val = reinterpret_cast<float4*>(&a[row*w + i*4])[0];
         divisor += __expf(val.x - maxval);
         divisor += __expf(val.y - maxval);
         divisor += __expf(val.z - maxval);
         divisor += __expf(val.w - maxval);
-      }
     }
 
     divisor += __shfl_down_sync(0xffffffff, divisor, 16, 32);
@@ -462,18 +456,15 @@ __global__ void softmax_kernel7(scalar_t* __restrict__ a, scalar_t* __restrict__
     __syncthreads();
     divisor = reduction[0];
 
-    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
+#pragma unroll URF
+    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y)
     {
-      #pragma unroll
-      for (int u = 0; u<UNROLL_FACTOR && (i+u*BLOCK_DIM_Y)*4<w; u++)
-      {
-        float4 val = reinterpret_cast<float4*>(&a[row*w + u*BLOCK_DIM_Y*4 + i*4])[0];
+        float4 val = reinterpret_cast<float4*>(&a[row*w + i*4])[0];
         val.x = __expf(val.x-maxval)/divisor;
         val.y = __expf(val.y-maxval)/divisor;
         val.z = __expf(val.z-maxval)/divisor;
         val.w = __expf(val.w-maxval)/divisor;
-        reinterpret_cast<float4*>(&b[row*w + u*BLOCK_DIM_Y*4 + i*4])[0] = val;
-      }
+        reinterpret_cast<float4*>(&b[row*w + i*4])[0] = val;
     }
   }
 }
@@ -492,12 +483,10 @@ __global__ void softmax_kernel8(scalar_t* __restrict__ a, scalar_t* __restrict__
     float maxval = 0;
     float divisor = 0;
     float old_maxval = 0;
-    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
+#pragma unroll URF
+    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y)
     {
-      #pragma unroll
-      for (int u = 0; u<UNROLL_FACTOR && (i+u*BLOCK_DIM_Y)*4<w; u++)
-      {
-        float4 val = reinterpret_cast<float4*>(&a[row*w + u*BLOCK_DIM_Y*4 + i*4])[0];
+        float4 val = reinterpret_cast<float4*>(&a[row*w + i*4])[0];
         maxval = fmaxf(maxval, val.x);
         maxval = fmaxf(maxval, val.y);
         maxval = fmaxf(maxval, val.z);
@@ -511,11 +500,10 @@ __global__ void softmax_kernel8(scalar_t* __restrict__ a, scalar_t* __restrict__
         divisor += __expf(val.y - maxval);
         divisor += __expf(val.z - maxval);
         divisor += __expf(val.w - maxval);
-      }
     }
     float incoming_divisor = 0;
     float incoming_maxval = 0;
-    #pragma unroll
+#pragma unroll URF
     for (int mask = 16; mask>0; mask/=2)
     {
       incoming_maxval = __shfl_xor_sync(0xffffffff, maxval, mask, 32);
@@ -542,7 +530,7 @@ __global__ void softmax_kernel8(scalar_t* __restrict__ a, scalar_t* __restrict__
     {
         maxval = ty < BLOCK_DIM_Y/32 ? reduction_max[ty] : 0;
         divisor = ty < BLOCK_DIM_Y/32 ? reduction_div[ty] : 0;
-        #pragma unroll
+#pragma unroll URF
         for (int mask = 16; mask>0; mask/=2)
         {
           incoming_maxval = __shfl_xor_sync(0xffffffff, maxval, mask, 32);
@@ -568,18 +556,15 @@ __global__ void softmax_kernel8(scalar_t* __restrict__ a, scalar_t* __restrict__
     maxval = reduction_max[0];
     divisor = reduction_div[0];
 
-    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
+#pragma unroll URF
+    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y)
     {
-      #pragma unroll
-      for (int u = 0; u<UNROLL_FACTOR && (i+u*BLOCK_DIM_Y)*4<w; u++)
-      {
-        float4 val = reinterpret_cast<float4*>(&a[row*w + u*BLOCK_DIM_Y*4 + i*4])[0];
+        float4 val = reinterpret_cast<float4*>(&a[row*w + i*4])[0];
         val.x = __expf(val.x-maxval)/divisor;
         val.y = __expf(val.y-maxval)/divisor;
         val.z = __expf(val.z-maxval)/divisor;
         val.w = __expf(val.w-maxval)/divisor;
-        reinterpret_cast<float4*>(&b[row*w + u*BLOCK_DIM_Y*4 + i*4])[0] = val;
-      }
+        reinterpret_cast<float4*>(&b[row*w + i*4])[0] = val;
     }
   }
 }
@@ -593,17 +578,13 @@ __global__ void softmax_kernel9(scalar_t* __restrict__ a, scalar_t* __restrict__
   if (row < h)
   {
     float maxval = 0;
-    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
+    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y)
     {
-      #pragma unroll
-      for (int u = 0; u<UNROLL_FACTOR && (i+u*BLOCK_DIM_Y)*4<w; u++)
-      {
-        float4 val = reinterpret_cast<float4*>(&a[row*w + u*BLOCK_DIM_Y*4 + i*4])[0];
+        float4 val = reinterpret_cast<float4*>(&a[row*w + i*4])[0];
         maxval = fmaxf(maxval, val.x);
         maxval = fmaxf(maxval, val.y);
         maxval = fmaxf(maxval, val.z);
         maxval = fmaxf(maxval, val.w);
-      }
     }
 
     if (ty >= BLOCK_DIM_Y/2)
@@ -628,17 +609,14 @@ __global__ void softmax_kernel9(scalar_t* __restrict__ a, scalar_t* __restrict__
     maxval = reduction[0];
 
     float divisor = 0.f;
-    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
+#pragma unroll URF
+    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y)
     {
-      #pragma unroll
-      for (int u = 0; u<UNROLL_FACTOR && (i+u*BLOCK_DIM_Y)*4<w; u++)
-      {
-        float4 val = reinterpret_cast<float4*>(&a[row*w + u*BLOCK_DIM_Y*4 + i*4])[0];
+        float4 val = reinterpret_cast<float4*>(&a[row*w + i*4])[0];
         divisor += __expf(val.x - maxval);
         divisor += __expf(val.y - maxval);
         divisor += __expf(val.z - maxval);
         divisor += __expf(val.w - maxval);
-      }
     }
 
     if (ty >= BLOCK_DIM_Y/2)
@@ -646,7 +624,7 @@ __global__ void softmax_kernel9(scalar_t* __restrict__ a, scalar_t* __restrict__
       reduction[ty - BLOCK_DIM_Y/2] = divisor;
     }
 
-    #pragma unroll
+#pragma unroll URF
     for(int stride = BLOCK_DIM_Y/2; stride>=1; stride/=2)
     {
       __syncthreads();
@@ -662,18 +640,15 @@ __global__ void softmax_kernel9(scalar_t* __restrict__ a, scalar_t* __restrict__
     __syncthreads();
     divisor = reduction[0];
 
-    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y*UNROLL_FACTOR)
+#pragma unroll URF
+    for (int i = ty; i<w/4; i+=BLOCK_DIM_Y)
     {
-      #pragma unroll
-      for (int u = 0; u<UNROLL_FACTOR && (i+u*BLOCK_DIM_Y)*4<w; u++)
-      {
-        float4 val = reinterpret_cast<float4*>(&a[row*w + u*BLOCK_DIM_Y*4 + i*4])[0];
+        float4 val = reinterpret_cast<float4*>(&a[row*w + i*4])[0];
         val.x = __expf(val.x-maxval)/divisor;
         val.y = __expf(val.y-maxval)/divisor;
         val.z = __expf(val.z-maxval)/divisor;
         val.w = __expf(val.w-maxval)/divisor;
-        reinterpret_cast<float4*>(&b[row*w + u*BLOCK_DIM_Y*4 + i*4])[0] = val;
-      }
+        reinterpret_cast<float4*>(&b[row*w + i*4])[0] = val;
     }
   }
 }
@@ -694,7 +669,7 @@ __global__ void softmax_kernel10(scalar_t* __restrict__ a, scalar_t* __restrict_
   if (row < h)
   {
     float maxval = 0;
-#pragma unroll 1
+#pragma unroll URF
     for (int i = ty; i<WIDTH/4; i+=BLOCK_DIM_Y)
     {
       float4 val = reinterpret_cast<float4*>(&a[row*WIDTH + i*4])[0];
@@ -733,7 +708,7 @@ __global__ void softmax_kernel10(scalar_t* __restrict__ a, scalar_t* __restrict_
     maxval = reduction[0];
     float divisor = 0.f;
     reg_array_idx=0;
-#pragma unroll 1
+#pragma unroll URF
     for (int i = ty; i<WIDTH/4; i+=BLOCK_DIM_Y)
     {
         float4 val = reg_array[reg_array_idx];
@@ -780,7 +755,7 @@ __global__ void softmax_kernel10(scalar_t* __restrict__ a, scalar_t* __restrict_
     divisor = reduction[0];
 
     reg_array_idx = 0;
-#pragma unroll 1
+#pragma unroll URF
     for (int i = ty; i<WIDTH/4; i+=BLOCK_DIM_Y)
     {
         float4 val = reg_array[reg_array_idx];

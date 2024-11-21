@@ -52,7 +52,7 @@ __global__ void softmax_kernel2(scalar_t* __restrict__ a, scalar_t* __restrict__
   if (row < h)
   {
     float maxval = 0;
-    for (int i = ty; i<w; i+=BLOCK_DIM_Y)
+    for (int i = ty*BLOCK_DIM_Y; i<min(w, (ty+1)*BLOCK_DIM_Y); i+=1)
     {
       maxval = fmaxf(maxval, a[row*w + i]);
     }
@@ -70,14 +70,25 @@ __global__ void softmax_kernel2(scalar_t* __restrict__ a, scalar_t* __restrict__
     __syncthreads();
     maxval = reduction[0];
     float divisor = 0.f;
-    for (int i = 0; i<w; i++)
+    for (int i = ty*BLOCK_DIM_Y; i<min(w, (ty+1)*BLOCK_DIM_Y); i+=1)
     {
       divisor += __expf(a[row*w + i] - maxval);
     }
+    reduction[ty] = divisor;
+    for(int stride = BLOCK_DIM_Y/2; stride>=1; stride/=2)
+    {
+      __syncthreads();
+      if (ty < stride)
+      {
+        reduction[ty] = reduction[ty] + reduction[ty+stride];
+      }
+    }
+    __syncthreads();
+    divisor = reduction[0];
 
     for (int i = ty; i<w; i+=BLOCK_DIM_Y)
     {
-      b[row*w + i] = __expf(a[row*w + i]-maxval)/(divisor);
+      b[row*w + i] = __expf(a[row*w + i]-maxval)/divisor;
     }
 
   }
@@ -780,8 +791,8 @@ torch::Tensor softmax_cu(torch::Tensor x)
   dim3 grid_size = dim3(h, 1, 1);
 
 #if SOFTMAX_VARIANT == 1
-  block_size = dim3(BLOCK_DIM_Y, 1, 1);
-  grid_size = dim3(w, h, 1);
+  block_size = dim3(32, 32, 1);
+  grid_size = dim3(w/32, h/32, 1);
   AT_DISPATCH_FLOATING_TYPES(x.type(), "softmax_cuda", ([&] {
         softmax_kernel<scalar_t><<<grid_size, block_size>>>
           (x.data_ptr<scalar_t>(), out.data_ptr<scalar_t>(), w, h);

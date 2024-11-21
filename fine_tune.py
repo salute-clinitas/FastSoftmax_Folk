@@ -23,7 +23,7 @@ def fine_tune_kernel(variant, do_unroll, x, pow, float4):
     best = None
     best_time = float("inf")
     results = {}
-    for dim_y in [2**x for x in range(7, 11)]:
+    for dim_y in [2**x for x in range(7, 11)] if variant != 1 else [2**10]:
         for unroll in [1,2,4,8] if do_unroll else [1]:
             if unroll * dim_y * (4 if float4 else 1) > 2**pow: continue
             func = f'''import torch

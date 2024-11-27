@@ -150,7 +150,8 @@ __global__ void softmax_kernel4(scalar_t* __restrict__ a, scalar_t* __restrict__
 {
   int row = blockIdx.x*blockDim.x + threadIdx.x;
   int ty = threadIdx.y;
-  __shared__ float reduction[BLOCK_DIM_Y/2]; 
+  int warp_id = ty/32;
+  __shared__ float reduction[BLOCK_DIM_Y/32]; 
   if (row < h)
   {
     float maxval = 0;
@@ -158,50 +159,59 @@ __global__ void softmax_kernel4(scalar_t* __restrict__ a, scalar_t* __restrict__
     {
       maxval = fmaxf(maxval, a[row*w + i]);
     }
-
-    if (ty >= BLOCK_DIM_Y/2)
+    for (int mask = 16; mask>0; mask/=2)
     {
-      reduction[ty - BLOCK_DIM_Y/2] = maxval;
+      maxval = fmaxf(maxval, __shfl_xor_sync(0xffffffff, maxval, mask, 32));
     }
-    for(int stride = BLOCK_DIM_Y/2; stride>=1; stride/=2)
+
+    if (ty%32 == 0)
     {
-      __syncthreads();
-      if (ty < stride)
-      {
-        maxval = fmaxf(maxval, reduction[ty]);
-        if (ty >= stride/2)
+      reduction[warp_id] = maxval;
+    }
+    __syncthreads();
+    if (warp_id == 0)
+    {
+        maxval = ty < BLOCK_DIM_Y/32 ? reduction[ty] : 0;
+        for (int mask = 16; mask>0; mask/=2)
         {
-          reduction[ty - stride/2] = maxval;
+          maxval = fmaxf(maxval, __shfl_xor_sync(0xffffffff, maxval, mask, 32));
         }
-      }
     }
-
+    if (ty == 0)
+    {
+        reduction[0] = maxval;
+    }
     __syncthreads();
     maxval = reduction[0];
-
     float divisor = 0.f;
     for (int i = ty; i<w; i+=BLOCK_DIM_Y)
     {
       divisor += __expf(a[row*w + i] - maxval);
     }
-
-    if (ty >= BLOCK_DIM_Y/2)
+    for (int mask = 16; mask>0; mask/=2)
     {
-      reduction[ty - BLOCK_DIM_Y/2] = divisor;
+      divisor += __shfl_xor_sync(0xffffffff, divisor, mask, 32);
     }
 
-    for(int stride = BLOCK_DIM_Y/2; stride>=1; stride/=2)
+    if (ty%32 == 0)
     {
-      __syncthreads();
-      if (ty < stride)
-      {
-        divisor = divisor + reduction[ty];
-        if (ty >= stride/2)
+      reduction[warp_id] = divisor;
+    }
+
+    __syncthreads();
+    if (warp_id == 0)
+    {
+        divisor = ty < BLOCK_DIM_Y/32 ? reduction[ty] : 0;
+        for (int mask = 16; mask>0; mask/=2)
         {
-          reduction[ty - stride/2] = divisor;
+          divisor += __shfl_xor_sync(0xffffffff, divisor, mask, 32);
         }
-      }
     }
+    if (ty == 0)
+    {
+        reduction[0] = divisor;
+    }
+
     __syncthreads();
     divisor = reduction[0];
 

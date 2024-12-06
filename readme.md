@@ -14,4 +14,5 @@ Softmax is a function that takes in a vector of real numbers and returns a proba
 
 The usual way of calculating it is by replacing each element with an exponent, raised to the power of said element
 divided by the sum of exponents of all elements in our vector
+
 $$\text{softmax}(x_i) = \frac{e^{x_i}}{\sum_{j=1}^{K} e^{x_j}}$$

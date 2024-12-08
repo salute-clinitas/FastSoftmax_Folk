@@ -54,6 +54,7 @@ With this info, we can calculate a theoretical maximum of performance that we ca
 
 $$\\frac{5}{8}*1\\frac{TB}{s} = 625\\,GFLOPs$$
 
+In practice the threashold is higher as long as our value fit in the cache since CUDA uses something called [write back cache](https://en.wikipedia.org/wiki/Cache_(computing)#Writing_policies)
 
 ## Initial Kernel
 

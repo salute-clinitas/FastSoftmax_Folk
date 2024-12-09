@@ -91,7 +91,7 @@ For just 1024 elements, it achieves a magnificent **8.9 GFLOPS**.
 
 ### 1. Distributing work between threads in a block
 
-The key to making a fast softmax algorithm is understanding how to perform a fast reduction algorithm. A reduction algorithm is a type of algorithm where we need to perform an operation on every input element where the input to the operation is a result of the previous input.
+The key to making a fast softmax algorithm is understanding how to perform a fast reduction algorithm. A reduction algorithm is a type of algorithm where we need to perform an operation on every input element where the input to the operation is a result of the previous operation.
 
 In order for this to parallelize nicely, the operator needs to be associative. That means that no matter the order of the operations, the result will be the same. This gives us a wonderful property: we don't need to calculate sequentially, but we can do it in a tree-like manner.
 

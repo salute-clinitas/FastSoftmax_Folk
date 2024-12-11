@@ -85,7 +85,7 @@ __global__ void softmax(int w, int h, float* input, float* output)
 There is one major bottleneck in this kernel: each thread in the row recalculates the maximum value and the divisor.
 While this wasn't really a big problem in the MNIST solver, where the height of the input was much bigger than the width, in recent trends, the amount of classes that we are predicting is much bigger than the batch size we are feeding the model(think llama3 with a 128000 vocab size)
 
-For just 1024 elements, it achieves a magnificent **8.9 GFLOPS**.
+For just 1024 elements, it achieves a magnificent **8.9 GFLOPs**.
 
 ## Optimization Strategies
 

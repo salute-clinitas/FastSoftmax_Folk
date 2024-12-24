@@ -20,7 +20,7 @@ constexpr int URF{UNROLL_FACTOR};
 #endif
 
 #define CEILING(x,y) (((x) + (y) - 1) / (y))
-
+/*
 template <typename scalar_t>
 __global__ void softmax_kernel(scalar_t* __restrict__ a, scalar_t* __restrict__ b, int w, int h)
 {
@@ -144,7 +144,7 @@ __global__ void softmax_kernel3(scalar_t* __restrict__ a, scalar_t* __restrict__
     }
   }
 }
-
+*/
 template <typename scalar_t>
 __global__ void softmax_kernel4(scalar_t* __restrict__ a, scalar_t* __restrict__ b, int w, int h)
 {
@@ -221,7 +221,7 @@ __global__ void softmax_kernel4(scalar_t* __restrict__ a, scalar_t* __restrict__
     }
   }
 }
-
+/*
 template <typename scalar_t>
 __global__ void softmax_kernel5(scalar_t* __restrict__ a, scalar_t* __restrict__ b, int w, int h)
 {
@@ -490,7 +490,7 @@ __global__ void softmax_kernel7(scalar_t* __restrict__ a, scalar_t* __restrict__
   }
 }
 
-
+*/
 template <typename scalar_t>
 __global__ void softmax_kernel8(scalar_t* __restrict__ a, scalar_t* __restrict__ b, int w, int h)
 {
@@ -589,7 +589,7 @@ __global__ void softmax_kernel8(scalar_t* __restrict__ a, scalar_t* __restrict__
     }
   }
 }
-
+/*
 template <typename scalar_t>
 __global__ void softmax_kernel9(scalar_t* __restrict__ a, scalar_t* __restrict__ b, int w, int h)
 {
@@ -790,7 +790,7 @@ __global__ void softmax_kernel10(scalar_t* __restrict__ a, scalar_t* __restrict_
 
   }
 }
-
+*/
 torch::Tensor softmax_cu(torch::Tensor x)
 {
   auto out = torch::empty_like(x);
@@ -799,7 +799,7 @@ torch::Tensor softmax_cu(torch::Tensor x)
 
   dim3 block_size = dim3(1, BLOCK_DIM_Y, 1);
   dim3 grid_size = dim3(h, 1, 1);
-
+/*
 #if SOFTMAX_VARIANT == 1
   block_size = dim3(32, 32, 1);
   grid_size = dim3(w/32, h/32, 1);
@@ -819,13 +819,13 @@ torch::Tensor softmax_cu(torch::Tensor x)
         softmax_kernel3<scalar_t><<<grid_size, block_size>>>
           (x.data_ptr<scalar_t>(), out.data_ptr<scalar_t>(), w, h);
         }));
-#endif
+#endif*/
 #if SOFTMAX_VARIANT == 4
   AT_DISPATCH_FLOATING_TYPES(x.type(), "softmax_cuda", ([&] {
         softmax_kernel4<scalar_t><<<grid_size, block_size>>>
           (x.data_ptr<scalar_t>(), out.data_ptr<scalar_t>(), w, h);
         }));
-#endif
+#endif/*
 #if SOFTMAX_VARIANT == 5
   AT_DISPATCH_FLOATING_TYPES(x.type(), "softmax_cuda", ([&] {
         softmax_kernel5<scalar_t><<<grid_size, block_size>>>
@@ -843,14 +843,14 @@ torch::Tensor softmax_cu(torch::Tensor x)
         softmax_kernel7<scalar_t><<<grid_size, block_size>>>
           (x.data_ptr<scalar_t>(), out.data_ptr<scalar_t>(), w, h);
         }));
-#endif
+#endif*/
 #if SOFTMAX_VARIANT == 8
   AT_DISPATCH_FLOATING_TYPES(x.type(), "softmax_cuda", ([&] {
         softmax_kernel8<scalar_t><<<grid_size, block_size>>>
           (x.data_ptr<scalar_t>(), out.data_ptr<scalar_t>(), w, h);
         }));
 #endif
-
+/*
 #if SOFTMAX_VARIANT == 9
   AT_DISPATCH_FLOATING_TYPES(x.type(), "softmax_cuda", ([&] {
         softmax_kernel9<scalar_t><<<grid_size, block_size>>>
@@ -864,6 +864,6 @@ torch::Tensor softmax_cu(torch::Tensor x)
           (x.data_ptr<scalar_t>(), out.data_ptr<scalar_t>(), w, h);
         }));
 #endif
-
+*/
   return out;
 }
